@@ -1,0 +1,107 @@
+name: Create Tag and GH Release
+
+on:
+  workflow_call:
+    inputs:
+      production-branch:
+        required: true
+        type: string
+      new-version:
+        required: true
+        type: string
+      releaser-version:
+        required: false
+        type: string
+        default: v2.0.0
+
+    # Note these are passed in from calling Action, but are defined in our Org Secrets
+    secrets:
+      OTP_VERSION:
+        required: true
+      ELIXIR_VERSION:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-18.04
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        ref: ${{ inputs.production-branch }}
+
+    # - Fetch all current tags in remote
+    # - Set Required commit config
+    - name: Git - Initialize 
+      run: |
+        git fetch --unshallow
+        git config user.name "GitHub Actions"
+        git config user.email noreply@github.com
+
+    - name: Get Releaser
+      run: |
+        aws s3 cp s3://204552664420-release-builds/releaser/${{ inputs.releaser-version }}/releaser ./releaser
+        chmod a+x ./releaser
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_DEFAULT_REGION: us-east-1
+
+    - uses: erlef/setup-beam@v1
+      with:
+        elixir-version: ${{ secrets.ELIXIR_VERSION }}
+        otp-version: ${{ secrets.OTP_VERSION }}
+
+    - name: Set env REF_BRANCH
+      run: echo REF_BRANCH=$GITHUB_REF_NAME >> $GITHUB_ENV
+
+    - name: Git - Merge branch if not prod branch
+      if: contains(env.REF_BRANCH, env.PROD_BRANCH) != true
+      run: git merge origin/${{ env.REF_BRANCH }} --allow-unrelated-histories
+
+    #------------------------ 
+    # Releaser Script - START
+    # NOTE!!! MUST run after branch is merged
+    #------------------------
+
+    - name: Releaser Script - Update Mix file and set var NEW_SEMVER
+      run: |
+        echo NEW_SEMVER=$(./releaser --new-version=${{ inputs.new-version }}) >> $GITHUB_ENV
+
+    - name: Releaser Script - Update Changelog and set var RELEASE_NOTES
+      id: release_notes
+      run: |
+        export RELEASE_NOTES="$(./releaser --get-release-notes )"
+        RELEASE_NOTES="${RELEASE_NOTES//'%'/'%25'}"
+        RELEASE_NOTES="${RELEASE_NOTES//$'\n'/'%0A'}"
+        RELEASE_NOTES="${RELEASE_NOTES//$'\r'/'%0D'}"
+        
+        echo "::set-output name=parsed_notes::$(echo "$RELEASE_NOTES")"
+
+    #------------------------ 
+    # Releaser Script - END
+    #------------------------
+
+    - name: Git - Commit and push updates
+      run: |
+        git add .
+        git commit -m "release v${{ env.NEW_SEMVER }}"
+        git push origin ${{ env.PROD_BRANCH }}
+
+    - name: Git - Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        commitish: ${{ env.PROD_BRANCH }}
+        tag_name: v${{ env.NEW_SEMVER }}
+        release_name: v${{ env.NEW_SEMVER }}
+        body: |
+          ${{ steps.release_notes.outputs.parsed_notes }}
+        draft: false
+        prerelease: false
+

@@ -1,12 +1,9 @@
-name: Create and Publish Elixir Release
+name: Build Artifacts and Publish Elixir Release
 
 on:
   workflow_call:
     inputs:
-      project_name:
-        required: false
-        type: string
-      tag:
+      test_input:
         required: false
         type: string
       escript:
@@ -41,8 +38,7 @@ jobs:
 
     - name: Echo Steps
       run: |
-        echo input name: ${{ inputs.project_name }}
-        echo input tag: ${{ inputs.tag }}
+        echo input 'test_input': ${{ inputs.test_input }}
         echo step name: ${{ steps.get_name.outputs.value }}
         echo step tag: ${{ steps.get_tag.outputs.value }}
   
@@ -68,3 +64,4 @@ jobs:
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_DEFAULT_REGION: us-east-1
