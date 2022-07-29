@@ -13,20 +13,24 @@ on:
         required: false
         type: string
         default: v2.0.0
+      elixir-version:
+        required: false
+        type: string
+        default: '1.12.3'
+      otp-version:
+        required: false
+        type: string
+        default: '24.0.2'
 
     # Note these are passed in from calling Action, but are defined in our Org Secrets
     secrets:
-      OTP_VERSION:
-        required: true
-      ELIXIR_VERSION:
-        required: true
       AWS_ACCESS_KEY_ID:
         required: true
       AWS_SECRET_ACCESS_KEY:
         required: true
 
 jobs:
-  build:
+  build_release:
     runs-on: ubuntu-18.04
 
     steps:
@@ -53,8 +57,8 @@ jobs:
 
     - uses: erlef/setup-beam@v1
       with:
-        elixir-version: ${{ secrets.ELIXIR_VERSION }}
-        otp-version: ${{ secrets.OTP_VERSION }}
+        elixir-version: ${{ inputs.elixir-version }}
+        otp-version: ${{ inputs.otp-version }}
 
     - name: Set env REF_BRANCH
       run: echo REF_BRANCH=$GITHUB_REF_NAME >> $GITHUB_ENV

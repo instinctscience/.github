@@ -10,12 +10,16 @@ on:
         required: false
         type: boolean
         default: false
+      elixir-version:
+        required: false
+        type: string
+        default: '1.12.3'
+      otp-version:
+        required: false
+        type: string
+        default: '24.0.2'
 
     secrets:
-      OTP_VERSION:
-        required: true
-      ELIXIR_VERSION:
-        required: true
       AWS_ACCESS_KEY_ID:
         required: true
       AWS_SECRET_ACCESS_KEY:
@@ -42,11 +46,10 @@ jobs:
         echo step name: ${{ steps.get_name.outputs.value }}
         echo step tag: ${{ steps.get_tag.outputs.value }}
   
-
     - uses: erlef/setup-beam@v1
       with:
-        elixir-version: ${{ secrets.ELIXIR_VERSION }}
-        otp-version: ${{ secrets.OTP_VERSION }}
+        elixir-version: ${{ inputs.elixir-version }}
+        otp-version: ${{ inputs.otp-version }}
 
     - name: Get Deps
       run: mix deps.get
@@ -55,9 +58,9 @@ jobs:
       if: ${{ inputs.escript }}
       run: mix escript.build
 
-    - name: Build Full Mix Release
+    - name: (TODO)Build Full Mix Release
       if: ${{ ! inputs.escript }}
-      run: echo build mix release
+      run: echo "TODO - build mix release"
 
     - name: Publish to AWS S3
       run: aws s3 cp ./${{steps.get_name.outputs.value}} s3://204552664420-release-builds/${{steps.get_name.outputs.value}}/${{steps.get_tag.outputs.value}}/
