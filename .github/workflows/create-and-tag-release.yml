@@ -60,11 +60,13 @@ jobs:
         elixir-version: ${{ inputs.elixir-version }}
         otp-version: ${{ inputs.otp-version }}
 
+    # Set the branch that started this action
     - name: Set env REF_BRANCH
       run: echo REF_BRANCH=$GITHUB_REF_NAME >> $GITHUB_ENV
 
-    - name: Git - Merge branch if not prod branch
-      if: contains(env.REF_BRANCH, env.PROD_BRANCH) != true
+    # Merge the branch that started this action
+    - name: Git - Merge if not production-branch
+      if: contains(env.REF_BRANCH, inputs.production-branch) != true
       run: git merge origin/${{ env.REF_BRANCH }} --allow-unrelated-histories
 
     #------------------------ 
@@ -94,14 +96,14 @@ jobs:
       run: |
         git add .
         git commit -m "release v${{ env.NEW_SEMVER }}"
-        git push origin ${{ env.PROD_BRANCH }}
+        git push origin ${{ inputs.production-branch }}
 
     - name: Git - Create Release
       uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        commitish: ${{ env.PROD_BRANCH }}
+        commitish: ${{ inputs.production-branch }}
         tag_name: v${{ env.NEW_SEMVER }}
         release_name: v${{ env.NEW_SEMVER }}
         body: |
@@ -109,3 +111,8 @@ jobs:
         draft: false
         prerelease: false
 
+    # delete the branch that was selected in the action 
+    # ignoring production branch
+    - name: Git - Delete branch if not production-branch
+      if: contains(env.REF_BRANCH, inputs.production-branch) != true
+      run: git push origin --delete ${{ env.REF_BRANCH }}
