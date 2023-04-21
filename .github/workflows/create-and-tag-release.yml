@@ -3,26 +3,29 @@ name: Create Tag and GH Release
 on:
   workflow_call:
     inputs:
+      # Required options
       production-branch:
         required: true
         type: string
-      new-version:
+      elixir-version:
         required: true
         type: string
+      otp-version:
+        required: true
+        type: string
+
+      # Optional options
+      app-release-version:
+        required: false
+        type: string
+        default: ""
       releaser-version:
         required: false
         type: string
         default: v2.0.0
-      elixir-version:
-        required: false
-        type: string
-        default: '1.12.3'
-      otp-version:
-        required: false
-        type: string
-        default: '24.0.2'
 
-    # Note these are passed in from calling Action, but are defined in our Org Secrets
+    # These must be passed in from calling Action
+    # Org Secrets are not accessible in a shared workflow action
     secrets:
       AWS_ACCESS_KEY_ID:
         required: true
@@ -34,9 +37,19 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - uses: actions/checkout@v2
+    # Set the branch that started this action
+    - name: Set env REF_BRANCH
+      run: echo REF_BRANCH=$GITHUB_REF_NAME >> $GITHUB_ENV
+
+    - name: Exit if not release branch	
+      if: contains(env.REF_BRANCH, inputs.production-branch) == true	
+      run: |	
+        echo "production branch selected"	
+        exit 1
+
+    - uses: actions/checkout@v3
       with:
-        ref: ${{ inputs.production-branch }}
+        ref: ${{ env.REF_BRANCH }}
 
     # - Fetch all current tags in remote
     # - Set Required commit config
@@ -60,59 +73,43 @@ jobs:
         elixir-version: ${{ inputs.elixir-version }}
         otp-version: ${{ inputs.otp-version }}
 
-    # Set the branch that started this action
-    - name: Set env REF_BRANCH
-      run: echo REF_BRANCH=$GITHUB_REF_NAME >> $GITHUB_ENV
-
-    # Merge the branch that started this action
-    - name: Git - Merge if not production-branch
-      if: contains(env.REF_BRANCH, inputs.production-branch) != true
-      run: git merge origin/${{ env.REF_BRANCH }} --allow-unrelated-histories
-
     #------------------------ 
     # Releaser Script - START
-    # NOTE!!! MUST run after branch is merged
     #------------------------
 
     - name: Releaser Script - Update Mix file and set var NEW_SEMVER
       run: |
-        echo NEW_SEMVER=$(./releaser --new-version=${{ inputs.new-version }}) >> $GITHUB_ENV
+        echo NEW_SEMVER=$(./releaser --new-version=${{ inputs.app-release-version }}) >> $GITHUB_ENV
 
     - name: Releaser Script - Update Changelog and set var RELEASE_NOTES
-      id: release_notes
-      run: |
-        export RELEASE_NOTES="$(./releaser --get-release-notes )"
-        RELEASE_NOTES="${RELEASE_NOTES//'%'/'%25'}"
-        RELEASE_NOTES="${RELEASE_NOTES//$'\n'/'%0A'}"
-        RELEASE_NOTES="${RELEASE_NOTES//$'\r'/'%0D'}"
-        
-        echo "::set-output name=parsed_notes::$(echo "$RELEASE_NOTES")"
+      run: ./releaser --get-release-notes	
 
     #------------------------ 
     # Releaser Script - END
     #------------------------
 
-    - name: Git - Commit and push updates
+    - name: Git - Commit
       run: |
         git add .
         git commit -m "release v${{ env.NEW_SEMVER }}"
+
+    - name: Git - Tag and Push
+      run: |
+        git tag v${{ env.NEW_SEMVER }}
+        git push origin HEAD
+        git push origin --tags
+
+    # Checkout the prod branch
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ inputs.production-branch }}
+
+    # Merge the branch that started this action
+    - name: Git - Merge branch to mainline
+      run: |	
+        git merge origin/${{ env.REF_BRANCH }} --allow-unrelated-histories	
         git push origin ${{ inputs.production-branch }}
 
-    - name: Git - Create Release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        commitish: ${{ inputs.production-branch }}
-        tag_name: v${{ env.NEW_SEMVER }}
-        release_name: v${{ env.NEW_SEMVER }}
-        body: |
-          ${{ steps.release_notes.outputs.parsed_notes }}
-        draft: false
-        prerelease: false
-
     # delete the branch that was selected in the action 
-    # ignoring production branch
-    - name: Git - Delete branch if not production-branch
-      if: contains(env.REF_BRANCH, inputs.production-branch) != true
+    - name: Git - Delete release branch
       run: git push origin --delete ${{ env.REF_BRANCH }}
