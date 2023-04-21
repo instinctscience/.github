@@ -24,12 +24,13 @@ on:
         type: string
         default: v2.0.0
 
-    # Note these are passed in from calling Action, but are defined in our Org Secrets
+    # These must be passed in from calling Action
+    # Org Secrets are not accessible in a shared workflow action
     secrets:
       AWS_ACCESS_KEY_ID:
-        required: false
+        required: true
       AWS_SECRET_ACCESS_KEY:
-        required: false
+        required: true
 
 jobs:
   build_release:

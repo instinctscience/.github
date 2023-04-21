@@ -11,13 +11,11 @@ on:
         type: boolean
         default: false
       elixir-version:
-        required: false
+        required: true
         type: string
-        default: '1.12.3'
       otp-version:
-        required: false
+        required: true
         type: string
-        default: '24.0.2'
 
     secrets:
       AWS_ACCESS_KEY_ID:
