@@ -7,9 +7,6 @@ on:
       production-branch:
         required: true
         type: string
-      app-release-version:
-        required: true
-        type: string
       elixir-version:
         required: true
         type: string
@@ -18,6 +15,10 @@ on:
         type: string
 
       # Optional options
+      app-release-version:
+        required: false
+        type: string
+        default: ""
       releaser-version:
         required: false
         type: string
@@ -39,7 +40,13 @@ jobs:
     - name: Set env REF_BRANCH
       run: echo REF_BRANCH=$GITHUB_REF_NAME >> $GITHUB_ENV
 
-    - uses: actions/checkout@v2
+    - name: Exit if not release branch	
+      if: contains(env.REF_BRANCH, inputs.production-branch) == true	
+      run: |	
+        echo "production branch selected"	
+        exit 1
+
+    - uses: actions/checkout@v3
       with:
         ref: ${{ env.REF_BRANCH }}
 
@@ -74,33 +81,33 @@ jobs:
         echo NEW_SEMVER=$(./releaser --new-version=${{ inputs.app-release-version }}) >> $GITHUB_ENV
 
     - name: Releaser Script - Update Changelog and set var RELEASE_NOTES
-      id: release_notes
-      run: |
-        export RELEASE_NOTES="$(./releaser --get-release-notes )"
-        RELEASE_NOTES="${RELEASE_NOTES//'%'/'%25'}"
-        RELEASE_NOTES="${RELEASE_NOTES//$'\n'/'%0A'}"
-        RELEASE_NOTES="${RELEASE_NOTES//$'\r'/'%0D'}"
-        
-        echo "::set-output name=parsed_notes::$(echo "$RELEASE_NOTES")"
+      run: ./releaser --get-release-notes	
 
     #------------------------ 
     # Releaser Script - END
     #------------------------
 
-    - name: Git - Commit and push updates
+    - name: Git - Commit
       run: |
         git add .
         git commit -m "release v${{ env.NEW_SEMVER }}"
+
+    - name: Git - Tag and Push
+      run: |
+        git tag v${{ env.NEW_SEMVER }}
         git push origin HEAD
+        git push origin --tags
 
     # Checkout the prod branch
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         ref: ${{ inputs.production-branch }}
 
     # Merge the branch that started this action
     - name: Git - Merge branch to mainline
-      run: git merge origin/${{ env.REF_BRANCH }} --allow-unrelated-histories
+      run: |	
+        git merge origin/${{ env.REF_BRANCH }} --allow-unrelated-histories	
+        git push origin ${{ inputs.production-branch }}
 
     # delete the branch that was selected in the action 
     - name: Git - Delete release branch
