@@ -7,7 +7,7 @@ on:
       production-branch:
         required: true
         type: string
-      new-version:
+      app-release-version:
         required: true
         type: string
       elixir-version:
@@ -71,7 +71,7 @@ jobs:
 
     - name: Releaser Script - Update Mix file and set var NEW_SEMVER
       run: |
-        echo NEW_SEMVER=$(./releaser --new-version=${{ inputs.new-version }}) >> $GITHUB_ENV
+        echo NEW_SEMVER=$(./releaser --new-version=${{ inputs.app-release-version }}) >> $GITHUB_ENV
 
     - name: Releaser Script - Update Changelog and set var RELEASE_NOTES
       id: release_notes
@@ -87,19 +87,21 @@ jobs:
     # Releaser Script - END
     #------------------------
 
-    # Merge the branch that started this action
-    - name: Git - Merge if not production-branch
-      if: contains(env.REF_BRANCH, inputs.production-branch) != true
-      run: git merge origin/${{ env.REF_BRANCH }} --allow-unrelated-histories
-
     - name: Git - Commit and push updates
       run: |
         git add .
         git commit -m "release v${{ env.NEW_SEMVER }}"
-        git push origin ${{ inputs.production-branch }}
+        git push origin HEAD
+
+    # Checkout the prod branch
+    - uses: actions/checkout@v2
+      with:
+        ref: ${{ inputs.production-branch }}
+
+    # Merge the branch that started this action
+    - name: Git - Merge branch to mainline
+      run: git merge origin/${{ env.REF_BRANCH }} --allow-unrelated-histories
 
     # delete the branch that was selected in the action 
-    # ignoring production branch
-    - name: Git - Delete branch if not production-branch
-      if: contains(env.REF_BRANCH, inputs.production-branch) != true
+    - name: Git - Delete release branch
       run: git push origin --delete ${{ env.REF_BRANCH }}
