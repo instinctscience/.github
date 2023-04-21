@@ -3,40 +3,45 @@ name: Create Tag and GH Release
 on:
   workflow_call:
     inputs:
+      # Required options
       production-branch:
         required: true
         type: string
       new-version:
         required: true
         type: string
+      elixir-version:
+        required: true
+        type: string
+      otp-version:
+        required: true
+        type: string
+
+      # Optional options
       releaser-version:
         required: false
         type: string
         default: v2.0.0
-      elixir-version:
-        required: false
-        type: string
-        default: '1.12.3'
-      otp-version:
-        required: false
-        type: string
-        default: '24.0.2'
 
     # Note these are passed in from calling Action, but are defined in our Org Secrets
     secrets:
       AWS_ACCESS_KEY_ID:
-        required: true
+        required: false
       AWS_SECRET_ACCESS_KEY:
-        required: true
+        required: false
 
 jobs:
   build_release:
     runs-on: ubuntu-22.04
 
     steps:
+    # Set the branch that started this action
+    - name: Set env REF_BRANCH
+      run: echo REF_BRANCH=$GITHUB_REF_NAME >> $GITHUB_ENV
+
     - uses: actions/checkout@v2
       with:
-        ref: ${{ inputs.production-branch }}
+        ref: ${{ env.REF_BRANCH }}
 
     # - Fetch all current tags in remote
     # - Set Required commit config
@@ -60,18 +65,8 @@ jobs:
         elixir-version: ${{ inputs.elixir-version }}
         otp-version: ${{ inputs.otp-version }}
 
-    # Set the branch that started this action
-    - name: Set env REF_BRANCH
-      run: echo REF_BRANCH=$GITHUB_REF_NAME >> $GITHUB_ENV
-
-    # Merge the branch that started this action
-    - name: Git - Merge if not production-branch
-      if: contains(env.REF_BRANCH, inputs.production-branch) != true
-      run: git merge origin/${{ env.REF_BRANCH }} --allow-unrelated-histories
-
     #------------------------ 
     # Releaser Script - START
-    # NOTE!!! MUST run after branch is merged
     #------------------------
 
     - name: Releaser Script - Update Mix file and set var NEW_SEMVER
@@ -92,24 +87,16 @@ jobs:
     # Releaser Script - END
     #------------------------
 
+    # Merge the branch that started this action
+    - name: Git - Merge if not production-branch
+      if: contains(env.REF_BRANCH, inputs.production-branch) != true
+      run: git merge origin/${{ env.REF_BRANCH }} --allow-unrelated-histories
+
     - name: Git - Commit and push updates
       run: |
         git add .
         git commit -m "release v${{ env.NEW_SEMVER }}"
         git push origin ${{ inputs.production-branch }}
-
-    - name: Git - Create Release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        commitish: ${{ inputs.production-branch }}
-        tag_name: v${{ env.NEW_SEMVER }}
-        release_name: v${{ env.NEW_SEMVER }}
-        body: |
-          ${{ steps.release_notes.outputs.parsed_notes }}
-        draft: false
-        prerelease: false
 
     # delete the branch that was selected in the action 
     # ignoring production branch
